@@ -7,9 +7,10 @@ import argparse
 import os
 import filecmp
 import shutil
+import fnmatch
 
 from datetime import datetime, timezone
-from distutils.dir_util import copy_tree
+#from distutils.dir_util import copy_tree
 
 from distutils import log
 log.set_verbosity(log.INFO)
@@ -17,20 +18,71 @@ log.set_threshold(log.INFO)
 
 version = '1.0'
 
-"""
-
-Currently uses distutils for copying a whole tree because we want to have output possible.
-Alternatively shutils copytree could be used:
-
-from shutil import copytree,copy2
-
 def copy2_verbose(src, dst):
     print('Copying {0}'.format(src))
-    copy2(src,dst)
+    shutil.copy2(src,dst)
 
-copytree(source, destination, copy_function=copy2_verbose)
+default_use_symbolic = False
 
-"""
+def make_link(src_path:str, lnk_path:str, use_symbolic = default_use_symbolic):
+    if not use_symbolic:
+        os.link(src_path,lnk_path)
+    else:
+        os.symlink(src_path,lnk_path)
+
+
+
+def my_copy_tree(src, dst, verbose=False, ignore_list=None):
+
+    if ignore_list is None:
+        ignore = None
+    elif  len(ignore_list) < 1:
+        ignore = None
+    else:
+        ignore = shutil.ignore_patterns(*ignore_list)
+
+    if verbose:
+        shutil.copytree(src, dst, ignore=ignore, copy_function=copy2_verbose)
+    else:
+        shutil.copytree(src,dst,ignore=ignore)
+
+
+class IgnoreCheck:
+
+    def __init__(self, ignore_list:list):
+        self._has_wildcards = False
+        self._ignore_list = ignore_list
+
+        if ignore_list is not None:
+            for word in ignore_list:
+                if '*' in word:
+                    self._has_wildcards = True
+                    break
+
+
+
+    @property
+    def ignore_list(self):
+        return self._ignore_list
+
+    def in_list(self, path_or_file:str):
+
+        word = os.path.basename(path_or_file)
+        if ignore_list is None or len(ignore_list) <1:
+            return False
+
+        if self._has_wildcards:
+            for item in self._ignore_list:
+                if fnmatch.fnmatch(word,item):
+                    return True
+        else:
+            if word in self._ignore_list:
+                return True
+            else:
+                return False
+
+
+
 
 def init_args():
     parser = argparse.ArgumentParser(description="incrementalBackup.py <SOURCE> <LATEST>\n"
@@ -52,10 +104,15 @@ def init_args():
                                                                        'actions as run.')
     parser.add_argument('-t','--test', action='store_true', help='Turns on testing mode directories are only '
                                                                  'compared, nothing changes.')
+
+    parser.add_argument('-s','--use_symbolic_links', action='store_true', help='If set will use symbolic links, default is to use hard links.')
+
+    parser.add_argument('-o','--omit_list',type=str,help='List of directory/file names to exclude, can use patterns,\n'
+                                                '(e.g  -o test,logs,*.exe)')
     return parser.parse_args()
 
 
-def create_links_of_files(src, dest, verbosity):
+def create_links_of_files(src, dest, verbosity, ignore_filter:IgnoreCheck):
     """
     Creates copy of the directory structure found
     :param src: Source directory
@@ -65,7 +122,7 @@ def create_links_of_files(src, dest, verbosity):
     """
 
     print( 'Calling CLF: src: {}, dst: {}'.format(src,dest))
-    if  not os.path.exists(dest):
+    if not os.path.exists(dest) or not ignore_filter.in_list(dest):
         os.mkdir(dest)
     else:
         print('WARNING: Directory {} already exists.'.format(dest))
@@ -75,16 +132,18 @@ def create_links_of_files(src, dest, verbosity):
     for item in os.listdir(src):
         curr_src_item = os.path.join(src, item)
         curr_dst_item = os.path.join(dest, item)
-
-        if os.path.isdir(curr_src_item):
-            create_links_of_files(curr_src_item, curr_dst_item,verbosity)
+        if ignore_filter.in_list(item):
+            pass
+        elif os.path.isdir(curr_src_item):
+            create_links_of_files(curr_src_item, curr_dst_item,verbosity, ignore_filter)
         else:
-            os.symlink(curr_src_item, curr_dst_item)
+            make_link(curr_src_item, curr_dst_item)
             print('Linking source {} to {}'.format(curr_src_item, curr_dst_item))
 
 
-def compare_replace_and_remove(src, dst, verbosity, test = False):
+def compare_replace_and_remove(src, dst, verbosity, ignore_filter:IgnoreCheck, test = False):
     """
+    :param ignore_filter:
     :param src: The source directory of data
     :param dst: The directory we will compare  the src data with, if test is False different or new data is copied from src to dst
     :param verbosity: if True output about the each operation performed or difference found is displayed
@@ -126,25 +185,26 @@ def compare_replace_and_remove(src, dst, verbosity, test = False):
                 if verbosity and test:
                     print('Removed file: {}.'.format(full_path_item))
 
-
+    # new item
     for item in rtn.left_only:
         data_changed = True
-        full_path_item = os.path.join(src, item)
-        dst_path_item = os.path.join(dst, item)
-        if os.path.isdir(full_path_item):
-            if verbosity:
-                print('Need to copy directory {} to {}.'.format(full_path_item, dst_path_item))
-            if not test:
-                copy_tree(full_path_item, dst_path_item, verbose=args.verbose)
-            if verbosity:
-                print('Copied directory (recursively) {} to {}'.format(full_path_item, dst_path_item))
-        else:
-            if verbosity and test:
-                print('Need to copy file {} to {}.'.format(full_path_item,dst_path_item))
-            if not test:
-                shutil.copy2(full_path_item, dst_path_item)
-            if verbosity and not test:
-                print('Copied file {} to {}.'.format(full_path_item,dst_path_item))
+        if not ignore_filter.in_list(item):
+            full_path_item = os.path.join(src, item)
+            dst_path_item = os.path.join(dst, item)
+            if os.path.isdir(full_path_item):
+                if verbosity:
+                    print('Need to copy directory {} to {}.'.format(full_path_item, dst_path_item))
+                if not test:
+                    my_copy_tree(full_path_item, dst_path_item, verbose=verbosity, ignore_list=ignore_filter.ignore_list)
+                if verbosity:
+                    print('Copied directory (recursively) {} to {}'.format(full_path_item, dst_path_item))
+            else:
+                if verbosity and test:
+                    print('Need to copy file {} to {}.'.format(full_path_item,dst_path_item))
+                if not test:
+                    shutil.copy2(full_path_item, dst_path_item)
+                if verbosity and not test:
+                    print('Copied file {} to {}.'.format(full_path_item,dst_path_item))
 
     for item in rtn.diff_files:
         data_changed = True
@@ -168,7 +228,7 @@ def compare_replace_and_remove(src, dst, verbosity, test = False):
     for common_dir in rtn.common_dirs:
         full_path_left =os.path.join(src, common_dir)
         full_path_right = os.path.join(dst, common_dir)
-        data_changed = compare_replace_and_remove( full_path_left, full_path_right, verbosity, test) or data_changed
+        data_changed = compare_replace_and_remove( full_path_left, full_path_right, verbosity, ignore_filter, test) or data_changed
 
 
 
@@ -181,6 +241,16 @@ if __name__ == '__main__':
     if not os.path.isdir(args.source):
         print('Source location [{}] is not a directory.'.format(args.source))
 
+    print('Using symbolic links: {}'.format(args.use_symbolic_links))
+    default_use_symbolic = args.use_symbolic_links
+
+    ignore_list = None
+    if args.omit_list is not None:
+        ignore_list = args.omit_list.split(',')
+        if len(ignore_list) == 1:
+            if len(ignore_list[0]) <1:
+                ignore_list = None
+
     first_run = True
     if os.path.isdir( args.latest ):
         first_run = False
@@ -192,15 +262,21 @@ if __name__ == '__main__':
         args.verbose = True
         print('Running in testing mode (comparison only)')
         print('Source: {}\nLatest: {}\n '.format(args.source, args.latest))
-        rtn = compare_replace_and_remove(args.source, args.latest, args.verbose, True)
+        rtn = compare_replace_and_remove(args.source, args.latest, args.verbose, ignore_list, True)
         print('\nDifferences: {}\n'.format(rtn))
         exit(rtn)
 
     if first_run:
         if args.verbose:
             print('First run detected. Copying all data from {} to {}.'.format(args.source, args.latest))
-        os.mkdir(args.latest)
-        copy_tree(args.source, args.latest, verbose = args.verbose)
+        if os.path.isdir(args.latest):
+            shutil.rmtree(args.latest)
+
+        #os.mkdir(args.latest)
+
+        my_copy_tree(args.source, args.latest, ignore_list=ignore_list, verbose=args.verbose)
+        #copy_tree(args.source, args.latest, verbose = args.verbose)
+
 
     else:
         source = os.path.abspath(args.source)
@@ -219,12 +295,13 @@ if __name__ == '__main__':
 
         #Create link to latest into latest for comparison
         #os.mkdir(latest)
+        ignore_filter = IgnoreCheck(ignore_list)
         print('Src: {}, Dst: {}'.format(new_folder_name, latest))
-        create_links_of_files(new_folder_name, latest, args.verbose)
+        create_links_of_files(new_folder_name, latest, args.verbose, ignore_filter)
         if args.verbose:
             print('Linked Data from {}  to {}.'.format(new_folder_name, latest))
 
-        change = compare_replace_and_remove(source, latest, args.verbose)
+        change = compare_replace_and_remove(source, latest, args.verbose, ignore_filter)
         if not change:
             print('[ Directories are identical. ]')
 
