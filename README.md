@@ -28,8 +28,8 @@ create new data).
   
   positional arguments:           
     <ul>
-    source>>>source directory                                                                                                                            
-    latest>>>directory of latest data, or desired destination if first time running
+    source &emsp source directory                                                                                                                            
+    latest &emsp directory of latest data, or desired destination if first time running
 </ul>
   
   optional arguments:
