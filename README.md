@@ -20,10 +20,12 @@ Usage:
           A new directory will be created that is a linked copy of the previous latest. This directory will be compared to SOURCE and any changed files               
           will be replaced with a newest version.                                                                                                                     
 
+  
   positional arguments:                                                                                                                                               
     source                source directory                                                                                                                            
     latest                directory of latest data, or desired destination if first time running
 
+  
   optional arguments:
     -h, --help            show this help message and exit
     -v, --verbose         Sets verbosity on will give details of actions as run.
