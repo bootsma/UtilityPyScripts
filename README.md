@@ -9,10 +9,11 @@ of a folder at specific points and time. It can us hard links or symbolic links 
 you to view what a folder looked like at a specific point in time without the cost of space (only file changes 
 create new data).
 
-** Usage: **
+**Usage:**
 
-
+<ul>
   incrementalBackup.py <SOURCE> <LATEST>                                                                                                                              
+  <ul>
    Version: 1.0                                                                                                                                                       
    Author: Gregory J. Bootsma, Copyright 2022                                                                                                                         
    Description:                                                                                                                                                       
@@ -36,3 +37,5 @@ create new data).
     -o OMIT_LIST, --omit_list OMIT_LIST
                           List of directory/file names to exclude, can use patterns,
                           (e.g  -o test,logs,*.exe)
+    </ul>
+  </ul>
