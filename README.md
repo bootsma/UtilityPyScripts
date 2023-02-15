@@ -13,7 +13,7 @@ create new data).
 **Usage:**
 
 <ul>
-## incrementalBackup.py <SOURCE> <LATEST>                                                                                                                              
+incrementalBackup.py <SOURCE> <LATEST>                                                                                                                              
   <ul>
    Version: 1.0                                                                                                                                                       
    Author: Gregory J. Bootsma, Copyright 2022     
