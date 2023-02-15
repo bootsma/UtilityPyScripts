@@ -10,7 +10,7 @@ of a folder at specific points and time. It can us hard links or symbolic links 
 you to view what a folder looked like at a specific point in time without the cost of space (only file changes 
 create new data).
 
-Usage:
+** Usage: **
 
 
   incrementalBackup.py <SOURCE> <LATEST>                                                                                                                              
