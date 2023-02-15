@@ -32,8 +32,8 @@ create new data).
   <ul>
   positional arguments:           
     <ul>
-      source &emsp; source directory </br>
-      latest &emsp; directory of latest data, or desired destination if first time running </br>    
+      source&emsp;source directory </br>
+      latest&emsp;directory of latest data, or desired destination if first time running </br>    
     </ul>
   </ul>
     
