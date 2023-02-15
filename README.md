@@ -2,7 +2,7 @@
 
 A collection of python scripts for random things..
 
-#incrementalBackup.py
+# incrementalBackup.py
 
 Incremental backup script that can be run on Windows/Linux as a task to create backups 
 of a folder at specific points and time. It can us hard links or symbolic links (hard links recommended). Allows
