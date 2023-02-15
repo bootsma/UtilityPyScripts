@@ -34,19 +34,19 @@ create new data).
     <ul>
       source &emsp; source directory </br>
       latest &emsp; directory of latest data, or desired destination if first time running </br>    
-
     </ul>
   </ul>
     
   <ul>
   optional arguments:
-    -h, --help     &emsp;   &emsp;    show this help message and exit \
-    -v, --verbose  &emsp;   &emsp;    Sets verbosity on will give details of actions as run. \
-    -t, --test     &emsp;  &emsp;     Turns on testing mode directories are only compared, nothing changes.\
-    -s, --use_symbolic_links&emsp;     If set will use symbolic links, default is to use hard links.\
+   <ul>
+    -h, --help     &emsp;   &emsp;    show this help message and exit </br>
+    -v, --verbose  &emsp;   &emsp;    Sets verbosity on will give details of actions as run. </br>
+    -t, --test     &emsp;  &emsp;     Turns on testing mode directories are only compared, nothing changes.</br>
+    -s, --use_symbolic_links&emsp;     If set will use symbolic links, default is to use hard links.</br>
     -o OMIT_LIST, --omit_list OMIT_LIST &emsp; 
                           List of directory/file names to exclude, can use patterns,
                           (e.g  -o test,logs,*.exe)
+     </ul>
     </ul>
-   </ul>
-  </ul>
+ </ul>
