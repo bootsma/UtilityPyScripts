@@ -4,6 +4,7 @@
 # Copyright (C) 2022
 
 import argparse
+import copy
 import os
 import filecmp
 import shutil
@@ -79,7 +80,12 @@ def my_copy_tree(src, dst, verbose=False, ignore_list=None):
         shutil.copytree(src,dst,ignore=ignore)
 
 
-class IgnoreCheck:
+class IgnoreFilesFilter:
+    """
+    Ignore List to be used in filecmp functions, supports wild cards through use of in_list,
+    filecmp functions handle wildcards (*) on there own
+    """
+
 
     def __init__(self, ignore_list:list):
         self._has_wildcards = False
@@ -91,11 +97,35 @@ class IgnoreCheck:
                     self._has_wildcards = True
                     break
 
-
-
     @property
     def ignore_list(self):
         return self._ignore_list
+
+    def filter_list(self, list_to_filter:list)->list:
+        return [x for x in list_to_filter if not self.in_list(x)]
+
+    def filter_dircmp(self, dircmp: filecmp.dircmp)->filecmp.dircmp:
+        """
+        Filters the files from the right_only, left_only, diff_files,
+        :param dircmp: filecmp.dircmp see https://docs.python.org/3/library/filecmp.html
+        :return: rtn_dircmp: a modified copy of dircmp (filecmp.dircmp class)
+        """
+        rtn_dircmp = copy.deepcopy(dircmp)
+        rtn_dircmp.left_list = self.filter_list(dircmp.left_list)
+        rtn_dircmp.right_list = self.filter_list(dircmp.right_list)
+        rtn_dircmp.common = self.filter_list(dircmp.common)
+        rtn_dircmp.right_only = self.filter_list(dircmp.right_only)
+        rtn_dircmp.left_only = self.filter_list(dircmp.left_only)
+        rtn_dircmp.common_dirs = self.filter_list(dircmp.common_dirs)
+        rtn_dircmp.common_files = self.filter_list(dircmp.common_files)
+        rtn_dircmp.common_funny = self.filter_list(dircmp.common_funny)
+        rtn_dircmp.same_files = self.filter_list(dircmp.same_files)
+        rtn_dircmp.diff_files = self.filter_list(dircmp.diff_files)
+        rtn_dircmp.funny_files = self.filter_list(dircmp.funny_files)
+        rtn_dircmp.subdirs = self.filter_list(dircmp.subdirs)
+
+        return rtn_dircmp
+
 
     def in_list(self, path_or_file:str):
 
@@ -107,6 +137,7 @@ class IgnoreCheck:
             for item in self._ignore_list:
                 if fnmatch.fnmatch(word,item):
                     return True
+            return False
         else:
             if word in self._ignore_list:
                 return True
@@ -114,7 +145,8 @@ class IgnoreCheck:
                 return False
 
 
-def create_links_of_files(src, dest, verbosity, ignore_filter:IgnoreCheck):
+
+def create_links_of_files(src, dest, verbosity, ignore_filter:IgnoreFilesFilter):
     """
     Creates copy of the directory structure found
     :param src: Source directory
@@ -143,7 +175,7 @@ def create_links_of_files(src, dest, verbosity, ignore_filter:IgnoreCheck):
             print('Linking source {} to {}'.format(curr_src_item, curr_dst_item))
 
 
-def compare_replace_and_remove(src, dst, verbosity, ignore_filter:IgnoreCheck=None, test = False):
+def compare_replace_and_remove(src, dst, verbosity, ignore_filter:IgnoreFilesFilter=None, test = False):
     """
     :param ignore_filter:
     :param src: The source directory of data
@@ -153,7 +185,7 @@ def compare_replace_and_remove(src, dst, verbosity, ignore_filter:IgnoreCheck=No
     :return:  return true if any changes found between directories
     """
     if ignore_filter is None:
-        ignore_filter = IgnoreCheck([])
+        ignore_filter = IgnoreFilesFilter([])
 
     data_changed = False
 
@@ -306,7 +338,7 @@ if __name__ == '__main__':
 
         #Create link to latest into latest for comparison
         #os.mkdir(latest)
-        ignore_filter = IgnoreCheck(ignore_list)
+        ignore_filter = IgnoreFilesFilter(ignore_list)
         print('Src: {}, Dst: {}'.format(new_folder_name, latest))
         create_links_of_files(new_folder_name, latest, args.verbose, ignore_filter)
         if args.verbose:
