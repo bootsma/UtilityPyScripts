@@ -8,6 +8,7 @@ import os
 import filecmp
 import shutil
 import fnmatch
+import sys
 
 from datetime import datetime, timezone
 #from distutils.dir_util import copy_tree
@@ -17,6 +18,37 @@ log.set_verbosity(log.INFO)
 log.set_threshold(log.INFO)
 
 version = '1.0'
+
+
+def init_args():
+    parser = argparse.ArgumentParser(description="incrementalBackup.py <SOURCE> <LATEST>\n"
+                                                 " Version: {}\n"
+                                                 " Author: Gregory J. Bootsma, Copyright 2022\n"
+                                                 " Description:\n\t"
+                                                 "Takes two directories SOURCE and LATEST. The source directory is the "
+                                                 "data you would like to backup. The LATEST directory is the location of\n\t"
+                                                 "the last backup made (e.g. ..\MYDATA_LATEST). The LATEST directory will"
+                                                 " be renamed with the date it was created  (e.g. SOURCEDIRNAME-YYYY-MM-DD-HHhMMmSSs). \n\t"
+                                                 "A new directory will be created that is a linked copy of the previous "
+                                                 "latest. This directory will be compared to SOURCE and any changed files \n\t"
+                                                 "will be replaced with a newest version.".format(version), formatter_class=argparse.RawTextHelpFormatter)
+
+    parser.add_argument('source', type=str, help="source directory")
+    parser.add_argument('latest', type=str, help="directory of latest data, or desired destination if first time "
+                                                 "running")
+    parser.add_argument('-v', '--verbose', action = 'store_true', help='Sets verbosity on will give details of '
+                                                                       'actions as run.')
+    parser.add_argument('-t','--test', action='store_true', help='Turns on testing mode directories are only '
+                                                                 'compared, nothing changes.')
+
+    parser.add_argument('-s','--use_symbolic_links', action='store_true', help='If set will use symbolic links, default is to use hard links.')
+
+    parser.add_argument('-o','--omit_list',type=str,help='List of directory/file names to exclude, can use patterns,\n'
+                                                '(e.g  -o test,logs,*.exe)')
+    return parser.parse_args()
+
+
+
 
 def copy2_verbose(src, dst):
     print('Copying {0}'.format(src))
@@ -68,7 +100,7 @@ class IgnoreCheck:
     def in_list(self, path_or_file:str):
 
         word = os.path.basename(path_or_file)
-        if ignore_list is None or len(ignore_list) <1:
+        if self._ignore_list is None or len(self._ignore_list) <1:
             return False
 
         if self._has_wildcards:
@@ -80,36 +112,6 @@ class IgnoreCheck:
                 return True
             else:
                 return False
-
-
-
-
-def init_args():
-    parser = argparse.ArgumentParser(description="incrementalBackup.py <SOURCE> <LATEST>\n"
-                                                 " Version: {}\n"
-                                                 " Author: Gregory J. Bootsma, Copyright 2022\n"
-                                                 " Description:\n\t"
-                                                 "Takes two directories SOURCE and LATEST. The source directory is the "
-                                                 "data you would like to backup. The LATEST directory is the location of\n\t"
-                                                 "the last backup made (e.g. ..\MYDATA_LATEST). The LATEST directory will"
-                                                 " be renamed with the date it was created  (e.g. SOURCEDIRNAME-YYYY-MM-DD-HHhMMmSSs). \n\t"
-                                                 "A new directory will be created that is a linked copy of the previous "
-                                                 "latest. This directory will be compared to SOURCE and any changed files \n\t"
-                                                 "will be replaced with a newest version.".format(version), formatter_class=argparse.RawTextHelpFormatter)
-
-    parser.add_argument('source', type=str, help="source directory")
-    parser.add_argument('latest', type=str, help="directory of latest data, or desired destination if first time "
-                                                 "running")
-    parser.add_argument('-v', '--verbose', action = 'store_true', help='Sets verbosity on will give details of '
-                                                                       'actions as run.')
-    parser.add_argument('-t','--test', action='store_true', help='Turns on testing mode directories are only '
-                                                                 'compared, nothing changes.')
-
-    parser.add_argument('-s','--use_symbolic_links', action='store_true', help='If set will use symbolic links, default is to use hard links.')
-
-    parser.add_argument('-o','--omit_list',type=str,help='List of directory/file names to exclude, can use patterns,\n'
-                                                '(e.g  -o test,logs,*.exe)')
-    return parser.parse_args()
 
 
 def create_links_of_files(src, dest, verbosity, ignore_filter:IgnoreCheck):
@@ -141,29 +143,34 @@ def create_links_of_files(src, dest, verbosity, ignore_filter:IgnoreCheck):
             print('Linking source {} to {}'.format(curr_src_item, curr_dst_item))
 
 
-def compare_replace_and_remove(src, dst, verbosity, ignore_filter:IgnoreCheck, test = False):
+def compare_replace_and_remove(src, dst, verbosity, ignore_filter:IgnoreCheck=None, test = False):
     """
     :param ignore_filter:
     :param src: The source directory of data
-    :param dst: The directory we will compare  the src data with, if test is False different or new data is copied from src to dst
+    :param dst: The directory we will compare the src data with, if test is False different or new data is copied from src to dst
     :param verbosity: if True output about the each operation performed or difference found is displayed
     :param test: If test is True only information about compared data is displayed no changes occur
-    :return:  return true if any changes found between directorys
+    :return:  return true if any changes found between directories
     """
+    if ignore_filter is None:
+        ignore_filter = IgnoreCheck([])
 
     data_changed = False
 
     rtn = filecmp.dircmp( src, dst)
-    if test:
-        verbosity=True
 
     local_diff=False
     if len(rtn.right_only)> 0 or len(rtn.left_only) >0 or len(rtn.diff_files) > 0:
         local_diff = True
 
-    if verbosity:
-        print('Comparing src [{}] to dst [{}] : [Local Diff] : [{}]'.format(src,dst, local_diff))
+    if len(rtn.funny_files) > 0 or len(rtn.common_funny) >0:
+        raise Exception(f'There were funny files found when comparing {src} to {dst}\n'
+                        f'Funny Files: {rtn.funny_files}\n'
+                        f'Common Funny Files: {rtn.common_funny}'
+                        )
 
+    if verbosity:
+        print('Comparing src [{}] to dst [{}] : [Local Diff] : [{}]'.format(src, dst, local_diff))
 
     for item in rtn.right_only:
         data_changed = True
@@ -236,7 +243,11 @@ def compare_replace_and_remove(src, dst, verbosity, ignore_filter:IgnoreCheck, t
 
 
 if __name__ == '__main__':
+
+    print(sys.argv)
+
     args = init_args()
+
 
     if not os.path.isdir(args.source):
         print('Source location [{}] is not a directory.'.format(args.source))
