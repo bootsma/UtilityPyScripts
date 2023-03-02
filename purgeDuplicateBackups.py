@@ -7,6 +7,7 @@ import argparse
 import os
 import filecmp
 import shutil
+import stat
 
 version = '1.0'
 
@@ -106,6 +107,10 @@ def init_args():
 
 line_break = '[==============================================================================]'
 
+def remove_readonly(func, path, _):
+    "Clear readonly bit when deleting files to avoid WinError 5 that occurs when deleting files that are readonly"
+    os.chmod(path, stat.S_IWRITE)
+    func(path)
 
 def search_and_destroy(root_dir: str, verbose: bool = False, destroy: bool = False, prompt_before_destroy: bool = True,
                        shallow: bool = True,  ignore_files: IgnoreFilesFilter = None):
@@ -176,10 +181,11 @@ def search_and_destroy(root_dir: str, verbose: bool = False, destroy: bool = Fal
         if proceed_to_destroy:
             for dir in dirs_to_destroy:
                 print(f'Deleting {dir}')
-                shutil.rmtree(dir)
+                shutil.rmtree(dir, onerror=remove_readonly )
 
 
 if __name__ == "__main__":
+
     args = init_args()
     destroy = args.destroy
     prompt_before_death = not args.no_prompt
@@ -190,6 +196,7 @@ if __name__ == "__main__":
         if len(ignore_list) == 1:
             if len(ignore_list[0]) <1:
                 ignore_list = None
+
     ignore_filter = IgnoreFilesFilter(ignore_list)
 
     search_and_destroy(args.root, args.verbose, destroy, prompt_before_death, args.shallow, ignore_filter)
