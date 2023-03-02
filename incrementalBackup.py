@@ -18,7 +18,7 @@ from distutils import log
 log.set_verbosity(log.INFO)
 log.set_threshold(log.INFO)
 
-version = '1.0'
+version = '1.1'
 
 
 def init_args():
@@ -155,13 +155,14 @@ def create_links_of_files(src, dest, verbosity, ignore_filter:IgnoreFilesFilter)
     :return: None
     """
 
-    print( 'Calling CLF: src: {}, dst: {}'.format(src,dest))
+
     if not os.path.exists(dest) or not ignore_filter.in_list(dest):
         os.mkdir(dest)
+        if verbosity:
+            print('Created directory {}.'.format(dest))
     else:
         print('WARNING: Directory {} already exists.'.format(dest))
-    if verbosity:
-        print('Created directory {}.'.format(dest))
+
     #for (dirpath, dirnames, filenames ) in os.walk(src):
     for item in os.listdir(src):
         curr_src_item = os.path.join(src, item)
@@ -172,7 +173,8 @@ def create_links_of_files(src, dest, verbosity, ignore_filter:IgnoreFilesFilter)
             create_links_of_files(curr_src_item, curr_dst_item,verbosity, ignore_filter)
         else:
             make_link(curr_src_item, curr_dst_item)
-            print('Linking source {} to {}'.format(curr_src_item, curr_dst_item))
+            if verbosity:
+                print('Linking source {} to {}'.format(curr_src_item, curr_dst_item))
 
 
 def compare_replace_and_remove(src, dst, verbosity, ignore_filter:IgnoreFilesFilter=None, test = False):
@@ -182,31 +184,50 @@ def compare_replace_and_remove(src, dst, verbosity, ignore_filter:IgnoreFilesFil
     :param dst: The directory we will compare the src data with, if test is False different or new data is copied from src to dst
     :param verbosity: if True output about the each operation performed or difference found is displayed
     :param test: If test is True only information about compared data is displayed no changes occur
-    :return:  return true if any changes found between directories
+    :return:  return empty list if no changes else a list of changes
     """
     if ignore_filter is None:
         ignore_filter = IgnoreFilesFilter([])
 
-    data_changed = False
+    data_changed = []
 
-    rtn = filecmp.dircmp( src, dst)
+    dir_compare = filecmp.dircmp( src, dst)
+
+    pre_filter_diff = False
+    if len(dir_compare.right_only) > 0 or len(dir_compare.left_only) > 0 or len(dir_compare.diff_files) > 0:
+        pre_filter_diff = True
+
+    dir_compare = ignore_filter.filter_dircmp(dir_compare)
 
     local_diff=False
-    if len(rtn.right_only)> 0 or len(rtn.left_only) >0 or len(rtn.diff_files) > 0:
+    if len(dir_compare.right_only)> 0 or len(dir_compare.left_only) >0 or len(dir_compare.diff_files) > 0:
         local_diff = True
 
-    if len(rtn.funny_files) > 0 or len(rtn.common_funny) >0:
+    if verbosity:
+        print(f'Comparing src [{src}] to dst [{dst}]\n\t '
+              f'[ Unfiltered Local Diff ] : [{pre_filter_diff}]\n\t'
+              f'[ Filtered   Local Diff ] : [{local_diff}]')
+
+
+
+
+
+
+
+    if len(dir_compare.funny_files) > 0 or len(dir_compare.common_funny) >0:
         raise Exception(f'There were funny files found when comparing {src} to {dst}\n'
-                        f'Funny Files: {rtn.funny_files}\n'
-                        f'Common Funny Files: {rtn.common_funny}'
+                        f'Funny Files: {dir_compare.funny_files}\n'
+                        f'Common Funny Files: {dir_compare.common_funny}'
                         )
 
-    if verbosity:
-        print('Comparing src [{}] to dst [{}] : [Local Diff] : [{}]'.format(src, dst, local_diff))
 
-    for item in rtn.right_only:
-        data_changed = True
+
+
+    for item in dir_compare.right_only:
+
+
         full_path_item = os.path.join(dst, item)
+        data_changed.append(f'[DST ONLY]:[{full_path_item}]')
         if os.path.isdir(full_path_item):
 
             if verbosity:
@@ -225,29 +246,30 @@ def compare_replace_and_remove(src, dst, verbosity, ignore_filter:IgnoreFilesFil
                     print('Removed file: {}.'.format(full_path_item))
 
     # new item
-    for item in rtn.left_only:
-        data_changed = True
-        if not ignore_filter.in_list(item):
-            full_path_item = os.path.join(src, item)
-            dst_path_item = os.path.join(dst, item)
-            if os.path.isdir(full_path_item):
-                if verbosity:
-                    print('Need to copy directory {} to {}.'.format(full_path_item, dst_path_item))
-                if not test:
-                    my_copy_tree(full_path_item, dst_path_item, verbose=verbosity, ignore_list=ignore_filter.ignore_list)
-                if verbosity:
-                    print('Copied directory (recursively) {} to {}'.format(full_path_item, dst_path_item))
-            else:
-                if verbosity and test:
-                    print('Need to copy file {} to {}.'.format(full_path_item,dst_path_item))
-                if not test:
-                    shutil.copy2(full_path_item, dst_path_item)
-                if verbosity and not test:
-                    print('Copied file {} to {}.'.format(full_path_item,dst_path_item))
+    for item in dir_compare.left_only:
 
-    for item in rtn.diff_files:
-        data_changed = True
         full_path_item = os.path.join(src, item)
+        data_changed.append(f'[SRC ONLY]:[{full_path_item}]')
+        dst_path_item = os.path.join(dst, item)
+        if os.path.isdir(full_path_item):
+            if verbosity:
+                print('Need to copy directory {} to {}.'.format(full_path_item, dst_path_item))
+            if not test:
+                my_copy_tree(full_path_item, dst_path_item, verbose=verbosity, ignore_list=ignore_filter.ignore_list)
+            if verbosity:
+                print('Copied directory (recursively) {} to {}'.format(full_path_item, dst_path_item))
+        else:
+            if verbosity and test:
+                print('Need to copy file {} to {}.'.format(full_path_item,dst_path_item))
+            if not test:
+                shutil.copy2(full_path_item, dst_path_item)
+            if verbosity and not test:
+                print('Copied file {} to {}.'.format(full_path_item,dst_path_item))
+
+    for item in dir_compare.diff_files:
+
+        full_path_item = os.path.join(src, item)
+        data_changed.append(f'[DIFF]:[{full_path_item}]')
         dst_path_item = os.path.join(dst, item)
         if os.path.isdir(full_path_item):
             raise Exception('Found a directory in what should only be files {}.'.format(full_path_item))
@@ -264,27 +286,30 @@ def compare_replace_and_remove(src, dst, verbosity, ignore_filter:IgnoreFilesFil
                 print('Replaced file {} with {}.'.format(dst_path_item, full_path_item))
 
     #check the common dirs:
-    for common_dir in rtn.common_dirs:
+    for common_dir in dir_compare.common_dirs:
         full_path_left =os.path.join(src, common_dir)
         full_path_right = os.path.join(dst, common_dir)
-        data_changed = compare_replace_and_remove( full_path_left, full_path_right, verbosity, ignore_filter, test) or data_changed
-
-
+        data_changed += compare_replace_and_remove( full_path_left, full_path_right, verbosity, ignore_filter, test) or data_changed
 
     return data_changed
 
 
 if __name__ == '__main__':
 
-    print(sys.argv)
-
+    print(f'[ Running        ] : [ incrementalBackup.py Version {version} ]')
+    print(f'[ Version        ] : [ {version} ]')
+    print(f'[ Arguments      ] : [ {sys.argv} ]')
     args = init_args()
+
+    print(f'[ Source         ] : [ {args.source} ]')
+    print(f'[ Dest           ] : [ {args.latest} ]')
+    print(f'[ Symbolic Links ] : [ {args.use_symbolic_links} ]')
 
 
     if not os.path.isdir(args.source):
-        print('Source location [{}] is not a directory.'.format(args.source))
+        print('[ Error ] : [ Source location [{}] is not a directory. ]'.format(args.source))
 
-    print('Using symbolic links: {}'.format(args.use_symbolic_links))
+
     default_use_symbolic = args.use_symbolic_links
 
     ignore_list = None
@@ -310,8 +335,8 @@ if __name__ == '__main__':
         exit(rtn)
 
     if first_run:
-        if args.verbose:
-            print('First run detected. Copying all data from {} to {}.'.format(args.source, args.latest))
+        #if args.verbose:
+        print('[ First Run ] : [ Copying all data from {} to {}. ]'.format(args.source, args.latest))
         if os.path.isdir(args.latest):
             shutil.rmtree(args.latest)
 
@@ -333,20 +358,25 @@ if __name__ == '__main__':
 
         os.rename(latest, new_folder_name)
 
-        if args.verbose:
-            print('Latest Data {} moved to {}.'.format(latest, new_folder_name))
+        #if args.verbose:
+        print(' [ Moving ] : [ {} -> {} ]'.format(latest, new_folder_name))
 
         #Create link to latest into latest for comparison
         #os.mkdir(latest)
         ignore_filter = IgnoreFilesFilter(ignore_list)
-        print('Src: {}, Dst: {}'.format(new_folder_name, latest))
+
         create_links_of_files(new_folder_name, latest, args.verbose, ignore_filter)
         if args.verbose:
             print('Linked Data from {}  to {}.'.format(new_folder_name, latest))
 
         change = compare_replace_and_remove(source, latest, args.verbose, ignore_filter)
         if not change:
-            print('[ Directories are identical. ]')
+            print('[ Finished ] : [ Directories were identical. ]')
+        else:
+            print('[ Finished ] : [ Difference found in directories ]')
+            print('[ Items Changed ] : ')
+            for i, item in enumerate(change):
+                print(f'[ {i} ] : [ {item} ]')
 
 
 

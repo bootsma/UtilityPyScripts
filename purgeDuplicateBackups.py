@@ -129,8 +129,9 @@ def search_and_destroy(root_dir: str, verbose: bool = False, destroy: bool = Fal
     dirs = [os.path.join(root, d) for d in os.listdir(root) if os.path.isdir(os.path.join(root, d))]
     dirs_sorted = sorted(dirs, key=lambda d: os.path.getctime(d))
 
+    keep_oldest = dirs_sorted.pop()
     if verbose:
-        print(f'Keeping the newest directory {dirs_sorted.pop()}')
+        print(f'Keeping the newest directory {keep_oldest}')
 
     if verbose:
         print(f'Going to compare directories starting with oldest: {dirs_sorted}')
@@ -145,12 +146,12 @@ def search_and_destroy(root_dir: str, verbose: bool = False, destroy: bool = Fal
                 print(line_break)
                 print(f'Comparing {curr_dir} to {dirs_sorted[next_dir_index]}')
 
+            # todo use this if you want info on all the differences
             # directories_match_a = not compare_replace_and_remove(curr_dir, dirs_sorted[next_dir_index], True, test=True)
+
             directories_match = compare_directories(curr_dir, dirs_sorted[next_dir_index], verbose=True,
                                                     shallow=shallow, ignore_files=ignore_files)
 
-            # if directories_match_a != directories_match:
-            #    print("(((((((((((((ERROR))))))))))))")
 
             if verbose:
                 print(f'Directories match: {directories_match}')
