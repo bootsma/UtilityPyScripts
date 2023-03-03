@@ -1,6 +1,6 @@
 # Incremental Backup Script
 # Author: Gregory J. Bootsma
-# Version: 1.0
+# Version: 1.1
 # Copyright (C) 2022
 
 import argparse

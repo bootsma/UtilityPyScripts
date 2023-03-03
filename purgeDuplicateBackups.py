@@ -1,7 +1,7 @@
 # Purge Duplicate Backup Scripts
 # Author: Gregory J. Bootsma
 # Version: 1.0
-# Copyright (C) 2022
+# Copyright (C) 2023
 
 import argparse
 import os
