@@ -289,7 +289,7 @@ def compare_replace_and_remove(src, dst, verbosity, ignore_filter:IgnoreFilesFil
     for common_dir in dir_compare.common_dirs:
         full_path_left =os.path.join(src, common_dir)
         full_path_right = os.path.join(dst, common_dir)
-        data_changed += compare_replace_and_remove( full_path_left, full_path_right, verbosity, ignore_filter, test) or data_changed
+        data_changed += compare_replace_and_remove( full_path_left, full_path_right, verbosity, ignore_filter, test)
 
     return data_changed
 
@@ -305,10 +305,8 @@ if __name__ == '__main__':
     print(f'[ Dest           ] : [ {args.latest} ]')
     print(f'[ Symbolic Links ] : [ {args.use_symbolic_links} ]')
 
-
     if not os.path.isdir(args.source):
         print('[ Error ] : [ Source location [{}] is not a directory. ]'.format(args.source))
-
 
     default_use_symbolic = args.use_symbolic_links
 
