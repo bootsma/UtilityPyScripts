@@ -26,7 +26,7 @@ def main():
         "  'from-history' : Only explicitly installed Conda packages. Best cross-platform resolve, but completely IGNORES pip packages.\n"
         "  'all'          : does it for all of the above (e.g. 'default', 'no-builds','from-history'"
     )
-    parser.add_argument('-t', '--type', choices=['default', 'no-builds', 'from-history'], default='default',
+    parser.add_argument('-t', '--type', choices=['default', 'no-builds', 'from-history','all-types'], default='default',
                         help=type_help)
 
     parser.add_argument('--timestamp', action='store_true',
@@ -59,9 +59,10 @@ def main():
 
     # Determine the type string for the filename
     if args.type != 'all-types':
-        type_list = [args.type]
-    else:
         type_list = ['default', 'no-builds', 'from-history']
+    else:
+        type_list = [args.type]
+
 
     for arg_type in type_list:
         args.type = arg_type
