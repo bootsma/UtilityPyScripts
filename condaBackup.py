@@ -23,7 +23,8 @@ def main():
         "Optional: Export type.\n"
         "  'default'      : Exact match including OS-specific build strings. Fails on different OS. Includes pip packages.\n"
         "  'no-builds'    : Strips OS-specific build strings but keeps exact versions. Best for cross-platform matching. Includes pip packages.\n"
-        "  'from-history' : Only explicitly installed Conda packages. Best cross-platform resolve, but completely IGNORES pip packages."
+        "  'from-history' : Only explicitly installed Conda packages. Best cross-platform resolve, but completely IGNORES pip packages.\n"
+        "  'all'          : does it for all of the above (e.g. 'default', 'no-builds','from-history'"
     )
     parser.add_argument('-t', '--type', choices=['default', 'no-builds', 'from-history'], default='default',
                         help=type_help)
@@ -37,6 +38,7 @@ def main():
     args.output.mkdir(parents=True, exist_ok=True)
 
     try:
+
         result = subprocess.run([args.conda, 'info', '--json'], capture_output=True, text=True, check=True)
         info = json.loads(result.stdout)
     except FileNotFoundError:
@@ -56,37 +58,44 @@ def main():
     timestamp_str = f"_{datetime.now().strftime('%Y%m%d_%H%M%S')}" if args.timestamp else ""
 
     # Determine the type string for the filename
-    if args.type == 'default':
-        # platform.system() returns 'Windows', 'Linux', or 'Darwin' (macOS)
-        type_str = f"_{platform.system().lower()}"
+    if args.type != 'all-types':
+        type_list = [args.type]
     else:
-        type_str = f"_{args.type}"
+        type_list = ['default', 'no-builds', 'from-history']
 
-    for env_path in envs:
-        if env_path == root_prefix:
-            if args.skip_base:
-                print("Skipping 'base' environment...")
-                continue
-            env_name = "base"
+    for arg_type in type_list:
+        args.type = arg_type
+        if args.type == 'default':
+            # platform.system() returns 'Windows', 'Linux', or 'Darwin' (macOS)
+            type_str = f"_{platform.system().lower()}"
         else:
-            env_name = Path(env_path).name
+            type_str = f"_{args.type}"
 
-        output_file = args.output / f"{env_name}{type_str}{timestamp_str}.yml"
-        print(f"Exporting '{env_name}' to {output_file}...")
+        for env_path in envs:
+            if env_path == root_prefix:
+                if args.skip_base:
+                    print("Skipping 'base' environment...")
+                    continue
+                env_name = "base"
+            else:
+                env_name = Path(env_path).name
 
-        export_cmd = [args.conda, 'env', 'export', '-p', env_path]
+            output_file = args.output / f"{env_name}{type_str}{timestamp_str}.yml"
+            print(f"Exporting '{env_name}' to {output_file}...")
 
-        if args.type == 'no-builds':
-            export_cmd.append('--no-builds')
-        elif args.type == 'from-history':
-            export_cmd.append('--from-history')
+            export_cmd = [args.conda, 'env', 'export', '-p', env_path]
 
-        export_cmd.extend(['-f', str(output_file)])
+            if args.type == 'no-builds':
+                export_cmd.append('--no-builds')
+            elif args.type == 'from-history':
+                export_cmd.append('--from-history')
 
-        try:
-            subprocess.run(export_cmd, capture_output=True, text=True, check=True)
-        except subprocess.CalledProcessError as e:
-            print(f"  Failed to export '{env_name}'. Error:\n  {e.stderr.strip()}")
+            export_cmd.extend(['-f', str(output_file)])
+
+            try:
+                subprocess.run(export_cmd, capture_output=True, text=True, check=True)
+            except subprocess.CalledProcessError as e:
+                print(f"  Failed to export '{env_name}'. Error:\n  {e.stderr.strip()}")
 
     print("\nAll environments backed up successfully.")
 
