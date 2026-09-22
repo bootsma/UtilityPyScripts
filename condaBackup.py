@@ -1,104 +1,217 @@
 #!/usr/bin/env python3
+
 import argparse
-import subprocess
 import json
-import sys
 import platform
-from pathlib import Path
-from datetime import datetime
+import shutil
+import subprocess
+import sys
 from argparse import RawTextHelpFormatter
+from datetime import datetime
+from pathlib import Path
+
+
+def check_conda_pack():
+    """Return True if conda-pack is available."""
+    return shutil.which("conda-pack") is not None
 
 
 def main():
+
     parser = argparse.ArgumentParser(
-        description="Backup all Conda environments to YAML files.",
-        formatter_class=RawTextHelpFormatter
+        description="Backup Conda environments to YAML and optional conda-pack archives.",
+        formatter_class=RawTextHelpFormatter,
     )
-    parser.add_argument('-o', '--output', required=True, type=Path,
-                        help="Required: Output folder location for the YAML files.")
-    parser.add_argument('-c', '--conda', default='conda',
-                        help="Optional: Path to the conda executable. Defaults to 'conda' in PATH.")
+
+    parser.add_argument(
+        "-o", "--output", required=True, type=Path, help="Output directory."
+    )
+
+    parser.add_argument(
+        "-c",
+        "--conda",
+        default="conda",
+        help="Path to conda executable. Defaults to 'conda' in PATH.",
+    )
 
     type_help = (
-        "Optional: Export type.\n"
-        "  'default'      : Exact match including OS-specific build strings. Fails on different OS. Includes pip packages.\n"
-        "  'no-builds'    : Strips OS-specific build strings but keeps exact versions. Best for cross-platform matching. Includes pip packages.\n"
-        "  'from-history' : Only explicitly installed Conda packages. Best cross-platform resolve, but completely IGNORES pip packages.\n"
-        "  'all'          : does it for all of the above (e.g. 'default', 'no-builds','from-history'"
+        "Export type:\n"
+        "  default      : Exact environment including build strings.\n"
+        "  no-builds    : Removes build strings but preserves versions.\n"
+        "  from-history : User-installed Conda packages only.\n"
+        "  all-types    : Export all three formats."
     )
-    parser.add_argument('-t', '--type', choices=['default', 'no-builds', 'from-history','all-types'], default='default',
-                        help=type_help)
 
-    parser.add_argument('--timestamp', action='store_true',
-                        help="Optional: Append the current timestamp to the output filenames.")
-    parser.add_argument('--skip-base', action='store_true',
-                        help="Optional: Skip exporting the base environment.")
+    parser.add_argument(
+        "-t",
+        "--type",
+        choices=["default", "no-builds", "from-history", "all-types"],
+        default="default",
+        help=type_help,
+    )
+
+    parser.add_argument(
+        "--timestamp", action="store_true", help="Append timestamp to backup filenames."
+    )
+
+    parser.add_argument(
+        "--skip-base", action="store_true", help="Skip backing up the base environment."
+    )
+
+    parser.add_argument(
+        "--pack", action="store_true", help="Create conda-pack archive backups."
+    )
+
+    parser.add_argument(
+        "--pack-format",
+        choices=["tar.gz", "zip"],
+        default=None,
+        help="Archive format. Default: zip on Windows, tar.gz elsewhere.",
+    )
 
     args = parser.parse_args()
-    args.output.mkdir(parents=True, exist_ok=True)
+
+    yaml_dir = args.output / "yaml"
+    pack_dir = args.output / "packed"
+
+    yaml_dir.mkdir(parents=True, exist_ok=True)
+
+    if args.pack:
+        pack_dir.mkdir(parents=True, exist_ok=True)
 
     try:
+        if args.conda == "conda":
+            import shutil
 
-        result = subprocess.run([args.conda, 'info', '--json'], capture_output=True, text=True, check=True)
+            conda_cmd = shutil.which(args.conda)
+            if conda_cmd is None:
+                print(f"ERROR: Conda executable '{args.conda}' was not found in PATH.")
+                sys.exit(1)
+            args.conda = conda_cmd
+
+        result = subprocess.run(
+            [args.conda, "info", "--json"], capture_output=True, text=True, check=True
+        )
+
         info = json.loads(result.stdout)
+
     except FileNotFoundError:
-        print(f"Error: Conda executable '{args.conda}' not found. Use -c to specify the full path.")
-        sys.exit(1)
-    except subprocess.CalledProcessError as e:
-        print(f"Error: Failed to run Conda.\n{e.stderr}")
+        print(f"ERROR: Conda executable '{args.conda}' was not found.")
         sys.exit(1)
 
-    root_prefix = info.get('root_prefix', '')
-    envs = info.get('envs', [])
+    except subprocess.CalledProcessError as e:
+        print(f"ERROR running conda:\n{e.stderr}")
+        sys.exit(1)
+
+    root_prefix = info.get("root_prefix", "")
+    envs = info.get("envs", [])
 
     if not envs:
         print("No Conda environments found.")
         sys.exit(0)
 
-    timestamp_str = f"_{datetime.now().strftime('%Y%m%d_%H%M%S')}" if args.timestamp else ""
+    timestamp_str = (
+        f"_{datetime.now().strftime('%Y%m%d_%H%M%S')}" if args.timestamp else ""
+    )
 
-    # Determine the type string for the filename
-    if args.type != 'all-types':
-        type_list = ['default', 'no-builds', 'from-history']
+    #
+    # FIXED LOGIC
+    #
+    if args.type == "all-types":
+        type_list = ["default", "no-builds", "from-history"]
     else:
         type_list = [args.type]
 
+    conda_pack_available = False
 
-    for arg_type in type_list:
-        args.type = arg_type
-        if args.type == 'default':
-            # platform.system() returns 'Windows', 'Linux', or 'Darwin' (macOS)
-            type_str = f"_{platform.system().lower()}"
+    if args.pack:
+        conda_pack_available = check_conda_pack()
+
+        if not conda_pack_available:
+            print(
+                "\nWARNING: conda-pack was requested but "
+                "is not installed.\n"
+                "Only YAML backups will be generated.\n"
+            )
+
+    #
+    # Process each environment
+    #
+    for env_path in envs:
+        if env_path == root_prefix:
+            if args.skip_base:
+                print("Skipping base environment...")
+                continue
+
+            env_name = "base"
+
         else:
-            type_str = f"_{args.type}"
+            env_name = Path(env_path).name
 
-        for env_path in envs:
-            if env_path == root_prefix:
-                if args.skip_base:
-                    print("Skipping 'base' environment...")
-                    continue
-                env_name = "base"
+        print(f"\nProcessing environment: {env_name}")
+
+        #
+        # YAML exports
+        #
+        for export_type in type_list:
+            if export_type == "default":
+                type_suffix = f"_{platform.system().lower()}"
             else:
-                env_name = Path(env_path).name
+                type_suffix = f"_{export_type}"
 
-            output_file = args.output / f"{env_name}{type_str}{timestamp_str}.yml"
-            print(f"Exporting '{env_name}' to {output_file}...")
+            output_file = yaml_dir / f"{env_name}{type_suffix}{timestamp_str}.yml"
 
-            export_cmd = [args.conda, 'env', 'export', '-p', env_path]
+            export_cmd = [
+                args.conda,
+                "env",
+                "export",
+                "-p",
+                env_path,
+                "--format",
+                "yaml",
+            ]
 
-            if args.type == 'no-builds':
-                export_cmd.append('--no-builds')
-            elif args.type == 'from-history':
-                export_cmd.append('--from-history')
+            if export_type == "no-builds":
+                export_cmd.append("--no-builds")
 
-            export_cmd.extend(['-f', str(output_file)])
+            elif export_type == "from-history":
+                export_cmd.append("--from-history")
+
+            export_cmd.extend(["-f", str(output_file)])
+
+            print(f"  Exporting {output_file.name}")
 
             try:
                 subprocess.run(export_cmd, capture_output=True, text=True, check=True)
-            except subprocess.CalledProcessError as e:
-                print(f"  Failed to export '{env_name}'. Error:\n  {e.stderr.strip()}")
 
-    print("\nAll environments backed up successfully.")
+            except subprocess.CalledProcessError as e:
+                print(f"  FAILED YAML export for {env_name}\n  {e.stderr.strip()}")
+                raise
+
+        #
+        # Conda-pack export
+        #
+        if args.pack and conda_pack_available:
+            archive_ext = args.pack_format
+
+            if archive_ext is None:
+                archive_ext = "zip" if platform.system() == "Windows" else "tar.gz"
+
+            archive_file = pack_dir / f"{env_name}{timestamp_str}.{archive_ext}"
+
+            pack_cmd = ["conda-pack", "-p", env_path, "-o", str(archive_file)]
+
+            print(f"  Packing {archive_file.name}")
+
+            try:
+                subprocess.run(pack_cmd, capture_output=True, text=True, check=True)
+
+            except subprocess.CalledProcessError as e:
+                print(
+                    f"  FAILED conda-pack export for {env_name}\n  {e.stderr.strip()}"
+                )
+
+    print("\nBackup complete.")
 
 
 if __name__ == "__main__":
